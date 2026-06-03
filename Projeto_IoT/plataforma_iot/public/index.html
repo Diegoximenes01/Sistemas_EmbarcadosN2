@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Arcanjos - Dashboard IoT de Incêndio</title>
+  <!-- Google Fonts: Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Socket.io CDN -->
+  <script src="/socket.io/socket.io.js"></script>
+  <!-- Custom CSS link -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Overlay de Emergência com piscado vermelho suave -->
+  <div id="alertOverlay" class="emergency-overlay"></div>
+
+  <!-- Barra de Navegação Superior -->
+  <header class="app-header">
+    <div class="header-logo">
+      <div class="logo-icon">🛡️</div>
+      <div class="logo-text">
+        <h1>ARCANJOS</h1>
+        <span>SISTEMA DE INCÊNDIO E SEGURANÇA</span>
+      </div>
+    </div>
+    <div class="header-status">
+      <div class="connection-badge" id="connBadge">
+        <span class="dot"></span>
+        <span id="connText">Desconectado</span>
+      </div>
+      <button class="btn-reset" id="btnResetData">Limpar Histórico</button>
+    </div>
+  </header>
+
+  <main class="dashboard-grid">
+    
+    <!-- Painel de Status Geral -->
+    <section class="glass-card status-card" id="statusCard">
+      <h3>Status Geral do Sistema</h3>
+      <div class="status-indicator">
+        <div class="status-circle" id="statusCircle">
+          <span class="status-icon" id="statusIcon">🛡️</span>
+        </div>
+        <div class="status-label">
+          <h2 id="statusTitle">Carregando...</h2>
+          <p id="statusDesc">Aguardando leituras do sensor de fumaça.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Nível de Fumaça Atual -->
+    <section class="glass-card value-card">
+      <h3>Nível de Fumaça Atual</h3>
+      <div class="metric-display">
+        <div class="smoke-gauge">
+          <svg viewBox="0 0 100 100" class="gauge-svg">
+            <circle class="gauge-bg" cx="50" cy="50" r="40"></circle>
+            <circle class="gauge-progress" cx="50" cy="50" r="40" id="gaugeProgress"></circle>
+          </svg>
+          <div class="gauge-text">
+            <span id="smokeValue">0</span>
+            <small>PPM (Aprox.)</small>
+          </div>
+        </div>
+      </div>
+      <div class="threshold-info">
+        <span>Limite de Alerta: <strong id="lblThreshold">55</strong> PPM</span>
+      </div>
+    </section>
+
+    <!-- Gráfico em Tempo Real -->
+    <section class="glass-card chart-card">
+      <div class="card-header">
+        <h3>Gráfico Analítico (Tempo Real)</h3>
+        <span class="live-tag">AO VIVO</span>
+      </div>
+      <div class="chart-container">
+        <canvas id="realtimeChart"></canvas>
+      </div>
+    </section>
+
+    <!-- Configurações de Contato para Alertas -->
+    <section class="glass-card config-card">
+      <h3>Configurações de Alerta</h3>
+      <form id="configForm" class="settings-form">
+        <div class="form-group">
+          <label for="inputEmail">E-mail de Emergência</label>
+          <input type="email" id="inputEmail" placeholder="exemplo@email.com" required>
+        </div>
+        <div class="form-group">
+          <label for="inputPhone">Celular (SMS)</label>
+          <input type="tel" id="inputPhone" placeholder="+5511999999999" required>
+        </div>
+        <div class="form-group">
+          <label for="inputThreshold">Limite Crítico do Sensor</label>
+          <input type="number" id="inputThreshold" min="10" max="1000" required>
+        </div>
+        <button type="submit" class="btn-save" id="btnSaveConfig">Salvar Configurações</button>
+      </form>
+      <div class="config-shortcuts">
+        <a href="/mobile" target="_blank" class="shortcut-link">📱 Abrir Versão Mobile App</a>
+      </div>
+    </section>
+
+    <!-- Histórico de Leituras & Logs -->
+    <section class="glass-card logs-card">
+      <div class="card-header">
+        <h3>Histórico de Eventos</h3>
+        <button class="btn-download" id="btnDownloadCSV">📥 Exportar CSV</button>
+      </div>
+      <div class="logs-container" id="logsContainer">
+        <!-- Logs injetados aqui -->
+        <div class="no-logs">Nenhum evento registrado ainda.</div>
+      </div>
+    </section>
+
+    <!-- Notificações Simuladas (SMS/E-mail) -->
+    <section class="glass-card notification-feed-card">
+      <h3>Centro de Mensagens Enviadas</h3>
+      <div class="notifications-feed" id="notificationsFeed">
+        <div class="no-logs">Nenhum e-mail ou SMS enviado neste ciclo.</div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Simulador Visual de Smartphone para SMS -->
+  <div class="sms-simulator-wrapper" id="smsSimulator">
+    <div class="phone-frame">
+      <div class="phone-speaker"></div>
+      <div class="phone-screen">
+        <div class="phone-header">
+          <span class="phone-time">12:00</span>
+          <div class="phone-icons">📶 🔋</div>
+        </div>
+        <div class="phone-app-header">
+          <span class="back-arrow">◀</span>
+          <div class="chat-info">
+            <span class="chat-avatar">🛡️</span>
+            <span class="chat-name">Arcanjos Alertas</span>
+          </div>
+        </div>
+        <div class="phone-chat-body" id="phoneChatBody">
+          <!-- Mensagens SMS simuladas -->
+        </div>
+        <div class="phone-input-bar">
+          <div class="fake-input">Somente Leitura</div>
+        </div>
+      </div>
+      <button class="phone-close" onclick="closeSMSSimulator()">Fechar</button>
+    </div>
+  </div>
+
+  <!-- Central de Toasts -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Elemento de Áudio para o Alarme -->
+  <script>
+    // Inicialização do contexto de áudio em navegador para sintetizar sirenes e beeps de alerta
+    let audioCtx = null;
+    let alarmInterval = null;
+
+    function initAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+    }
+
+    function playBeep(freq = 600, duration = 0.1) {
+      initAudio();
+      if (!audioCtx) return;
+      
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+      
+      gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+      
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      
+      osc.start();
+      osc.stop(audioCtx.currentTime + duration);
+    }
+
+    function startSiren() {
+      initAudio();
+      if (!audioCtx || alarmInterval) return;
+
+      let high = true;
+      alarmInterval = setInterval(() => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(high ? 800 : 500, audioCtx.currentTime);
+        
+        gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.001, audioCtx.currentTime + 0.25);
+        
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.25);
+        
+        high = !high;
+      }, 300);
+    }
+
+    function stopSiren() {
+      if (alarmInterval) {
+        clearInterval(alarmInterval);
+        alarmInterval = null;
+      }
+    }
+  </script>
+
+  <script src="app.js"></script>
+</body>
+</html>
