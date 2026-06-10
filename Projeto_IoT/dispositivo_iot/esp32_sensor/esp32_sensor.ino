@@ -18,15 +18,19 @@
 // ==========================================
 // CONFIGURAÇÕES DO WIFI E SERVIDOR
 // ==========================================
-const char* ssid = "NOVA ROMA_ALUNOS";
-const char* password = "Alunos@2025";
+// Configuração para rodar no Wokwi (simulador WiFi gratuito do Wokwi)
+const char* ssid = "Wokwi-GUEST";
+const char* password = "";
 
-// Endpoint da API da TagoIO e Token de Autorização do Dispositivo
-// const char* serverEndpoint = "https://api.tago.io/data";
+// Configurações para hardware real (se necessário):
+// const char* ssid = "NOVA ROMA_ALUNOS";
+// const char* password = "Alunos@2025";
+
+// Token de Autorização do Dispositivo TagoIO
 const char* tagoToken = "1590acd8-26a1-41b8-a5cb-da6f022c5872";
 
-// Configurado automaticamente para enviar os dados para o Servidor Local Express (que repassa para a TagoIO)
-const char* serverEndpoint = "http://192.168.1.10:3000/api/device/data";
+// Configurado para enviar os dados diretamente para a nuvem da TagoIO
+const char* serverEndpoint = "https://api.tago.io/data";
 
 // ==========================================
 // DEFINIÇÃO DOS PINOS

@@ -118,17 +118,11 @@ app.post('/api/config', (req, res) => {
 });
 
 // Endpoint que o dispositivo IoT (ESP32/Ponte Serial) consome para enviar dados
-app.post('/api/device/data', async (req, res) => {
-  let { smoke, alertaAtivo } = req.body;
-
-  if (smoke === undefined) {
-    return res.status(400).json({ error: 'Dados inválidos. Campo "smoke" é obrigatório.' });
-  }
-
+// Função auxiliar para processar e distribuir uma nova leitura do sensor (usada pelo POST local e pelo Polling da TagoIO)
+function processarLeitura(smoke, alertaAtivo, timestamp = new Date().toISOString()) {
   smoke = parseInt(smoke);
-  alertaAtivo = alertaAtivo === true || alertaAtivo === 'true' || smoke >= alertConfig.threshold;
+  alertaAtivo = alertaAtivo === true || alertaAtivo === 'true' || alertaAtivo === 1 || alertaAtivo === '1' || smoke >= alertConfig.threshold;
 
-  const timestamp = new Date().toISOString();
   const newReading = { timestamp, smoke, alertaAtivo };
 
   // Adiciona ao histórico e remove se passar do máximo
@@ -168,7 +162,24 @@ app.post('/api/device/data', async (req, res) => {
     alertsHistory.push(recoveryEvent);
     io.emit('systemAlert', recoveryEvent);
 
+    // enviarEmailRecuperacao(smoke, timestamp);
+    // enviarSMSRecuperacao(smoke);
   }
+}
+
+// Endpoint que o dispositivo IoT (ESP32/Ponte Serial) consome para enviar dados
+app.post('/api/device/data', async (req, res) => {
+  let { smoke, alertaAtivo } = req.body;
+
+  if (smoke === undefined) {
+    return res.status(400).json({ error: 'Dados inválidos. Campo "smoke" é obrigatório.' });
+  }
+
+  smoke = parseInt(smoke);
+  alertaAtivo = alertaAtivo === true || alertaAtivo === 'true' || smoke >= alertConfig.threshold;
+
+  // Processa localmente e atualiza os dashboards conectados via websocket
+  processarLeitura(smoke, alertaAtivo);
 
   // Encaminha a leitura de dados para a TagoIO na nuvem automaticamente em segundo plano
   const tagoToken = "1590acd8-26a1-41b8-a5cb-da6f022c5872";
@@ -187,7 +198,7 @@ app.post('/api/device/data', async (req, res) => {
   })
   .then(response => {
     if (response.ok) {
-      console.log(`📡 [TAGOIO Cloud] Dados sincronizados: Fumaça: ${smoke} PPM | Alerta: ${alertaAtivo}`);
+      console.log(`📡 [TAGOIO Cloud] Dados sincronizados via HTTP POST: Fumaça: ${smoke} PPM | Alerta: ${alertaAtivo}`);
     } else {
       console.log(`⚠️ [TAGOIO Cloud] Falha ao sincronizar dados. Código: ${response.status}`);
     }
@@ -363,6 +374,60 @@ io.on('connection', (socket) => {
     console.log(`🔌 Cliente desconectado: ${socket.id}`);
   });
 });
+
+// ==========================================
+// Busca ativa (Polling) da Tago.IO
+// ==========================================
+let ultimoTimeProcessado = null;
+
+async function buscarDadosTagoIO() {
+  const tagoToken = "1590acd8-26a1-41b8-a5cb-da6f022c5872";
+  try {
+    const response = await fetch("https://api.tago.io/data?variable[]=smoke&variable[]=alertaAtivo&qty=2", {
+      method: "GET",
+      headers: {
+        "Device-Token": tagoToken
+      }
+    });
+
+    if (!response.ok) {
+      // Silencia erros rotineiros de conexão ou limite de requisições se necessário, mas loga se falhar
+      if (response.status !== 404) {
+        console.log(`⚠️ [TagoIO Polling] Falha ao ler dados. Código: ${response.status}`);
+      }
+      return;
+    }
+
+    const resData = await response.json();
+    if (resData.status && resData.result && resData.result.length > 0) {
+      const smokeItem = resData.result.find(item => item.variable === 'smoke');
+      const alertaItem = resData.result.find(item => item.variable === 'alertaAtivo');
+
+      if (smokeItem) {
+        const timestamp = smokeItem.time;
+
+        // Processa apenas se for uma leitura nova baseada no timestamp
+        if (timestamp !== ultimoTimeProcessado) {
+          ultimoTimeProcessado = timestamp;
+
+          const smoke = parseInt(smokeItem.value);
+          const alertaAtivo = alertaItem 
+            ? (parseInt(alertaItem.value) === 1 || alertaItem.value === 'true' || alertaItem.value === true) 
+            : (smoke >= alertConfig.threshold);
+
+          console.log(`📡 [TagoIO Polling] Nova leitura recebida da nuvem: Fumaça: ${smoke} PPM | Alerta: ${alertaAtivo}`);
+          
+          processarLeitura(smoke, alertaAtivo, timestamp);
+        }
+      }
+    }
+  } catch (err) {
+    console.error("❌ [TagoIO Polling] Erro de conexão ao buscar dados:", err.message);
+  }
+}
+
+// Inicia o polling a cada 2 segundos para manter o dashboard local atualizado
+setInterval(buscarDadosTagoIO, 2000);
 
 // Inicialização do servidor
 server.listen(PORT, '0.0.0.0', () => {

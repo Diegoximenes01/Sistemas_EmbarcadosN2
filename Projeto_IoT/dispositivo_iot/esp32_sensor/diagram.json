@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "author": "Arcanjos Team",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "board-esp32-devkitc-v4",
+      "id": "esp",
+      "top": -9.6,
+      "left": -76.8,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led-green",
+      "top": -163.2,
+      "left": 105.6,
+      "attrs": { "color": "green" }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led-red",
+      "top": -163.2,
+      "left": 182.4,
+      "attrs": { "color": "red" }
+    },
+    {
+      "type": "wokwi-buzzer",
+      "id": "buzzer",
+      "top": 124.8,
+      "left": 134.4,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-potentiometer",
+      "id": "pot-mq2",
+      "top": 113.6,
+      "left": -231.2,
+      "attrs": { "value": "0" }
+    }
+  ],
+  "connections": [
+    [ "esp:GND.1", "pot-mq2:GND", "black", [ "h0" ] ],
+    [ "esp:3V3", "pot-mq2:VCC", "red", [ "h0" ] ],
+    [ "esp:34", "pot-mq2:SIG", "blue", [ "h0" ] ],
+    [ "esp:GND.2", "led-green:C", "black", [ "h0" ] ],
+    [ "esp:GND.2", "led-red:C", "black", [ "h0" ] ],
+    [ "esp:2", "led-green:A", "green", [ "h0" ] ],
+    [ "esp:4", "led-red:A", "red", [ "h0" ] ],
+    [ "esp:5", "buzzer:SIG", "orange", [ "h0" ] ],
+    [ "esp:GND.1", "buzzer:GND", "black", [ "h0" ] ]
+  ],
+  "dependencies": {}
+}
