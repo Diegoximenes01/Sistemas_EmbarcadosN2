@@ -1,26 +1,29 @@
 /**
- * 🛡️ Arcanjos - Tinkercad Serial Bridge (Console Javascript F12)
+ * 🛡️ Arcanjos - Tinkercad Serial Bridge to Tago.IO (Console Javascript F12)
+ * 
+ * Como funciona este fluxo:
+ * 1. O Arduino no Tinkercad imprime o JSON serial: {"smoke": 45, "alertaAtivo": false}
+ * 2. Este script roda no console do Tinkercad e envia os dados DIRETAMENTE para a Tago.IO (POST).
+ * 3. O servidor local Node.js faz a busca ativa (polling) na Tago.IO e atualiza o App Mobile via WebSockets.
  * 
  * Como usar:
  * 1. Abra o Tinkercad no Google Chrome ou Edge.
  * 2. Inicie a simulação do circuito e abra o "Código" -> "Monitor Serial" na parte inferior.
  * 3. Pressione F12 no seu teclado e clique na aba "Console".
  * 4. Cole este script completo e pressione ENTER.
- * 5. Veja as leituras do sensor do Tinkercad serem transmitidas automaticamente 
- *    para o servidor local e depois para o dashboard e TagoIO!
  */
 
 (function() {
   console.clear();
-  console.log("%c🛡️ ARCANJOS TINKERCAD BRIDGE INICIADA 🛡️", "color: #e74c3c; font-size: 16px; font-weight: bold;");
-  console.log("Monitorando a saída do Monitor Serial do Tinkercad...");
+  console.log("%c🛡️ ARCANJOS TINKERCAD ➔ TAGO.IO BRIDGE INICIADA 🛡️", "color: #e74c3c; font-size: 16px; font-weight: bold;");
+  console.log("Monitorando e enviando dados diretamente para o Tago.IO...");
 
-  const SERVER_URL = "http://localhost:3000/api/device/data";
+  const TAGO_URL = "https://api.tago.io/data";
+  const TAGO_TOKEN = "1590acd8-26a1-41b8-a5cb-da6f022c5872";
   let lastLineSent = "";
 
   // Função para encontrar a saída de texto do monitor serial no DOM do Tinkercad
   function getSerialContent() {
-    // Tinkercad usa elementos com classes que contêm 'serial-monitor' ou textareas do editor de código
     const selectors = [
       '.serial-monitor-content',
       '.code_panel__serial_monitor__output',
@@ -70,32 +73,39 @@
       lastLineSent = newestLine;
       console.log(`[SERIAL LIDO] -> ${newestLine}`);
 
-      // Tenta decodificar o JSON e enviar para o servidor local
+      // Tenta decodificar o JSON e enviar para a Tago.IO
       try {
         const payload = JSON.parse(newestLine);
         
         if (payload.smoke !== undefined) {
-          fetch(SERVER_URL, {
+          // Formata payload no padrão exigido pela API da Tago.IO
+          const tagoPayload = [
+            { "variable": "smoke", "value": parseInt(payload.smoke) },
+            { "variable": "alertaAtivo", "value": payload.alertaAtivo ? 1 : 0 }
+          ];
+
+          fetch(TAGO_URL, {
             method: "POST",
             headers: {
-              "Content-Type": "application/json"
+              "Content-Type": "application/json",
+              "Authorization": TAGO_TOKEN
             },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(tagoPayload)
           })
           .then(async response => {
-            const data = await response.json();
             if (response.ok) {
-              console.log(`%c   📡 HTTP OK: Enviado ao App -> Fumaça: ${payload.smoke} PPM | Alerta: ${payload.alertaAtivo}`, "color: #2ecc71;");
+              console.log(`%c   📡 TAGO.IO OK: Enviado -> Fumaça: ${payload.smoke} PPM | Alerta: ${payload.alertaAtivo}`, "color: #2ecc71;");
             } else {
-              console.error(`   ❌ HTTP Erro: ${response.status} |`, data);
+              const errText = await response.text();
+              console.error(`   ❌ TAGO.IO Erro: ${response.status} |`, errText);
             }
           })
           .catch(err => {
-            console.error("   ❌ Erro de conexão com o servidor local (certifique-se de que o backend está rodando na porta 3000):", err.message);
+            console.error("   ❌ Erro de rede ao enviar para a Tago.IO:", err.message);
           });
         }
       } catch (e) {
-        // Ignora linhas que não são JSON válido (ex: textos de inicialização)
+        // Ignora linhas que não são JSON válido (ex: textos de inicialização do Arduino)
         console.log(`[LOG COMUM] ${newestLine}`);
       }
     }
