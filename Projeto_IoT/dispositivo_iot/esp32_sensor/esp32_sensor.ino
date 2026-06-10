@@ -18,12 +18,15 @@
 // ==========================================
 // CONFIGURAÇÕES DO WIFI E SERVIDOR
 // ==========================================
-const char* ssid = "NOME_DA_SUA_REDE_WIFI";
-const char* password = "SENHA_DO_SEU_WIFI";
+const char* ssid = "NOVA ROMA_ALUNOS";
+const char* password = "Alunos@2025";
 
-// Endereço IP do seu computador rodando o servidor Express (porta 3000)
-// Exemplo: "http://192.168.1.100:3000/api/device/data"
-const char* serverEndpoint = "http://ENDERECO_IP_DO_COMPUTADOR:3000/api/device/data";
+// Endpoint da API da TagoIO e Token de Autorização do Dispositivo
+// const char* serverEndpoint = "https://api.tago.io/data";
+const char* tagoToken = "1590acd8-26a1-41b8-a5cb-da6f022c5872";
+
+// Configurado automaticamente para enviar os dados para o Servidor Local Express (que repassa para a TagoIO)
+const char* serverEndpoint = "http://192.168.1.10:3000/api/device/data";
 
 // ==========================================
 // DEFINIÇÃO DOS PINOS
@@ -131,7 +134,7 @@ void loop() {
   }
 }
 
-// Envia a requisição HTTP POST com payload JSON
+// Envia a requisição HTTP POST com payload JSON (compatível com TagoIO e servidor local)
 void enviarDadosServidor(int valorFumaca, bool estadoAlerta) {
   HTTPClient http;
   
@@ -139,12 +142,26 @@ void enviarDadosServidor(int valorFumaca, bool estadoAlerta) {
   http.begin(serverEndpoint);
   http.addHeader("Content-Type", "application/json");
   
-  // Monta o payload JSON
-  // Exemplo: {"smoke": 45, "alertaAtivo": false}
-  String jsonPayload = "{\"smoke\":" + String(valorFumaca) + 
-                       ",\"alertaAtivo\":" + (estadoAlerta ? "true" : "false") + "}";
+  // Se o endpoint for da TagoIO, adiciona o cabeçalho Authorization
+  if (String(serverEndpoint).indexOf("tago.io") != -1) {
+    http.addHeader("Authorization", tagoToken);
+  }
   
-  Serial.print("Enviando para plataforma: ");
+  // Monta o payload de acordo com a plataforma de destino
+  String jsonPayload;
+  if (String(serverEndpoint).indexOf("tago.io") != -1) {
+    // Padrão exigido pela TagoIO: [{"variable": "nome", "value": valor}, ...]
+    jsonPayload = "[";
+    jsonPayload += "{\"variable\":\"smoke\",\"value\":" + String(valorFumaca) + "},";
+    jsonPayload += "{\"variable\":\"alertaAtivo\",\"value\":" + String(estadoAlerta ? 1 : 0) + "}";
+    jsonPayload += "]";
+  } else {
+    // Padrão do seu Servidor Express Local
+    jsonPayload = "{\"smoke\":" + String(valorFumaca) + 
+                  ",\"alertaAtivo\":" + (estadoAlerta ? "true" : "false") + "}";
+  }
+  
+  Serial.print("Enviando dados: ");
   Serial.println(jsonPayload);
   
   // Envia a requisição POST
@@ -152,7 +169,7 @@ void enviarDadosServidor(int valorFumaca, bool estadoAlerta) {
   
   if (httpResponseCode > 0) {
     String response = http.getString();
-    Serial.print("Resposta do Servidor (");
+    Serial.print("Resposta (");
     Serial.print(httpResponseCode);
     Serial.print("): ");
     Serial.println(response);

@@ -13,7 +13,11 @@ except ImportError:
 # Importa modulo para captura de teclado nao bloqueante no Windows
 import msvcrt
 
-SERVER_URL = "http://localhost:3000/api/device/data"
+SERVER_URL = "https://api.tago.io/data"
+TAGO_TOKEN = "1590acd8-26a1-41b8-a5cb-da6f022c5872"
+
+# Caso queira usar localmente, descomente a linha abaixo e comente as de cima:
+# SERVER_URL = "http://localhost:3000/api/device/data"
 
 def draw_gauge(value, threshold):
     width = 30
@@ -81,17 +85,29 @@ def main():
         sys.stdout.write(f"\rLeitura: {draw_gauge(smoke, threshold)} | Alerta: {'ALERTA' if alerta_ativo else 'SEGURO'} | Alvo: {target_smoke} PPM  ")
         sys.stdout.flush()
 
-        # 4. Envia para o servidor local
-        payload = {
-            "smoke": smoke,
-            "alertaAtivo": alerta_ativo
-        }
+        # 4. Envia para o servidor (TagoIO ou Local)
+        headers = {"Content-Type": "application/json"}
+        
+        if "tago.io" in SERVER_URL:
+            headers["Authorization"] = TAGO_TOKEN
+            payload = [
+                {"variable": "smoke", "value": smoke},
+                {"variable": "alertaAtivo", "value": 1 if alerta_ativo else 0}
+            ]
+        else:
+            payload = {
+                "smoke": smoke,
+                "alertaAtivo": alerta_ativo
+            }
 
         try:
-            response = requests.post(SERVER_URL, json=payload, timeout=2)
+            response = requests.post(SERVER_URL, json=payload, headers=headers, timeout=5)
             # Se der certo, mantemos limpo
         except requests.exceptions.RequestException:
-            sys.stdout.write("\r[ERRO] Erro ao se conectar com o servidor. Verifique se 'node server.js' esta rodando! ")
+            if "tago.io" in SERVER_URL:
+                sys.stdout.write("\r[ERRO] Falha ao enviar para o TagoIO. Verifique sua conexao com a internet! ")
+            else:
+                sys.stdout.write("\r[ERRO] Erro ao se conectar com o servidor local. Verifique se 'node server.js' esta rodando! ")
             sys.stdout.flush()
 
         # Aguarda 1.5 segundos

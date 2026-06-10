@@ -2,226 +2,190 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Arcanjos - Dashboard IoT de Incêndio</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Arcanjos Mobile App</title>
   <!-- Google Fonts: Outfit -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
-  <!-- Chart.js CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <!-- Socket.io CDN -->
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <!-- Socket.io -->
   <script src="/socket.io/socket.io.js"></script>
-  <!-- Custom CSS link -->
+  <!-- CSS -->
   <link rel="stylesheet" href="style.css">
+  <!-- Web App Meta tags for PWA look -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 </head>
 <body>
 
-  <!-- Overlay de Emergência com piscado vermelho suave -->
-  <div id="alertOverlay" class="emergency-overlay"></div>
+  <!-- Overlay para Alertas de Incêndio -->
+  <div id="mobileAlertOverlay" class="mobile-emergency-overlay"></div>
 
-  <!-- Barra de Navegação Superior -->
-  <header class="app-header">
-    <div class="header-logo">
-      <div class="logo-icon">🛡️</div>
-      <div class="logo-text">
-        <h1>ARCANJOS</h1>
-        <span>SISTEMA DE INCÊNDIO E SEGURANÇA</span>
-      </div>
-    </div>
-    <div class="header-status">
-      <div class="connection-badge" id="connBadge">
-        <span class="dot"></span>
-        <span id="connText">Desconectado</span>
-      </div>
-      <button class="btn-reset" id="btnResetData">Limpar Histórico</button>
-    </div>
-  </header>
-
-  <main class="dashboard-grid">
+  <!-- Container principal do App -->
+  <div class="app-container">
     
-    <!-- Painel de Status Geral -->
-    <section class="glass-card status-card" id="statusCard">
-      <h3>Status Geral do Sistema</h3>
-      <div class="status-indicator">
-        <div class="status-circle" id="statusCircle">
-          <span class="status-icon" id="statusIcon">🛡️</span>
+    <!-- Status Bar fake do topo -->
+    <header class="mobile-header">
+      <div class="status-bar-fake">
+        <span class="time-fake">12:00</span>
+        <span class="signals-fake">📶 🔋 5G</span>
+      </div>
+      <div class="app-bar">
+        <div class="app-title-wrapper">
+          <span class="app-icon">🛡️</span>
+          <h2>Arcanjos Mobile</h2>
         </div>
-        <div class="status-label">
-          <h2 id="statusTitle">Carregando...</h2>
-          <p id="statusDesc">Aguardando leituras do sensor de fumaça.</p>
+        <div class="connection-status" id="mobileConnStatus">
+          <span class="status-dot"></span>
         </div>
       </div>
-    </section>
+    </header>
 
-    <!-- Nível de Fumaça Atual -->
-    <section class="glass-card value-card">
-      <h3>Nível de Fumaça Atual</h3>
-      <div class="metric-display">
-        <div class="smoke-gauge">
-          <svg viewBox="0 0 100 100" class="gauge-svg">
-            <circle class="gauge-bg" cx="50" cy="50" r="40"></circle>
-            <circle class="gauge-progress" cx="50" cy="50" r="40" id="gaugeProgress"></circle>
-          </svg>
-          <div class="gauge-text">
-            <span id="smokeValue">0</span>
-            <small>PPM (Aprox.)</small>
+    <!-- Área de Conteúdo (páginas dinâmicas) -->
+    <main class="mobile-main">
+      
+      <!-- TAB 1: MONITORAMENTO (HOME) -->
+      <div class="tab-content active" id="tab-home">
+        <!-- Banner de Emergência -->
+        <div class="emergency-banner" id="emergencyBanner">
+          <span>⚠️ ATENÇÃO: INCÊNDIO DETECTADO!</span>
+        </div>
+
+        <div class="status-widget">
+          <div class="gauge-outer">
+            <div class="gauge-inner" id="mobileGaugeInner">
+              <span class="smoke-lbl">Fumaça</span>
+              <span class="smoke-val" id="mobileSmokeVal">0</span>
+              <span class="smoke-unit">PPM</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="mobile-card info-card" id="mobileStatusCard">
+          <div class="info-icon" id="mobileStatusIcon">🟢</div>
+          <div class="info-text">
+            <h3 id="mobileStatusTitle">Ambiente Seguro</h3>
+            <p id="mobileStatusDesc">Todas as condições estão normais.</p>
+          </div>
+        </div>
+
+        <div class="quick-stats-grid">
+          <div class="stat-box">
+            <span class="stat-lbl">Limite Crítico</span>
+            <span class="stat-val" id="lblMobileThreshold">55 PPM</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-lbl">Último Alerta</span>
+            <span class="stat-val" id="lblLastAlertTime">Nenhum</span>
           </div>
         </div>
       </div>
-      <div class="threshold-info">
-        <span>Limite de Alerta: <strong id="lblThreshold">55</strong> PPM</span>
-      </div>
-    </section>
 
-    <!-- Gráfico em Tempo Real -->
-    <section class="glass-card chart-card">
-      <div class="card-header">
-        <h3>Gráfico Analítico (Tempo Real)</h3>
-        <span class="live-tag">AO VIVO</span>
-      </div>
-      <div class="chart-container">
-        <canvas id="realtimeChart"></canvas>
-      </div>
-    </section>
-
-    <!-- Configurações de Contato para Alertas -->
-    <section class="glass-card config-card">
-      <h3>Configurações de Alerta</h3>
-      <form id="configForm" class="settings-form">
-        <div class="form-group">
-          <label for="inputEmail">E-mail de Emergência</label>
-          <input type="email" id="inputEmail" placeholder="exemplo@email.com" required>
+      <!-- TAB 2: HISTÓRICO E RELATÓRIOS -->
+      <div class="tab-content" id="tab-reports">
+        <div class="section-title">
+          <h3>Histórico de Leituras</h3>
+          <button class="btn-mobile-download" id="btnMobileCSV">Exportar CSV</button>
         </div>
-        <div class="form-group">
-          <label for="inputPhone">Celular (SMS)</label>
-          <input type="tel" id="inputPhone" placeholder="+5511999999999" required>
-        </div>
-        <div class="form-group">
-          <label for="inputThreshold">Limite Crítico do Sensor</label>
-          <input type="number" id="inputThreshold" min="10" max="1000" required>
-        </div>
-        <button type="submit" class="btn-save" id="btnSaveConfig">Salvar Configurações</button>
-      </form>
-      <div class="config-shortcuts">
-        <a href="/mobile" target="_blank" class="shortcut-link">📱 Abrir Versão Mobile App</a>
-      </div>
-    </section>
 
-    <!-- Histórico de Leituras & Logs -->
-    <section class="glass-card logs-card">
-      <div class="card-header">
-        <h3>Histórico de Eventos</h3>
-        <button class="btn-download" id="btnDownloadCSV">📥 Exportar CSV</button>
-      </div>
-      <div class="logs-container" id="logsContainer">
-        <!-- Logs injetados aqui -->
-        <div class="no-logs">Nenhum evento registrado ainda.</div>
-      </div>
-    </section>
-
-    <!-- Notificações Simuladas (SMS/E-mail) -->
-    <section class="glass-card notification-feed-card">
-      <h3>Centro de Mensagens Enviadas</h3>
-      <div class="notifications-feed" id="notificationsFeed">
-        <div class="no-logs">Nenhum e-mail ou SMS enviado neste ciclo.</div>
-      </div>
-    </section>
-
-  </main>
-
-  <!-- Simulador Visual de Smartphone para SMS -->
-  <div class="sms-simulator-wrapper" id="smsSimulator">
-    <div class="phone-frame">
-      <div class="phone-speaker"></div>
-      <div class="phone-screen">
-        <div class="phone-header">
-          <span class="phone-time">12:00</span>
-          <div class="phone-icons">📶 🔋</div>
-        </div>
-        <div class="phone-app-header">
-          <span class="back-arrow">◀</span>
-          <div class="chat-info">
-            <span class="chat-avatar">🛡️</span>
-            <span class="chat-name">Arcanjos Alertas</span>
+        <div class="reports-summary">
+          <div class="summary-item">
+            <span class="lbl">Média de Fumaça</span>
+            <span class="val" id="lblAvgSmoke">0 PPM</span>
+          </div>
+          <div class="summary-item">
+            <span class="lbl">Leitura Máxima</span>
+            <span class="val" id="lblMaxSmoke">0 PPM</span>
           </div>
         </div>
-        <div class="phone-chat-body" id="phoneChatBody">
-          <!-- Mensagens SMS simuladas -->
-        </div>
-        <div class="phone-input-bar">
-          <div class="fake-input">Somente Leitura</div>
+
+        <div class="mobile-logs-list" id="mobileLogsList">
+          <div class="no-logs">Nenhuma leitura gravada ainda.</div>
         </div>
       </div>
-      <button class="phone-close" onclick="closeSMSSimulator()">Fechar</button>
-    </div>
+
+      <!-- TAB 3: CONFIGURAÇÕES -->
+      <div class="tab-content" id="tab-settings">
+        <div class="section-title">
+          <h3>Configurações de Alerta</h3>
+        </div>
+
+        <form id="mobileConfigForm" class="mobile-form">
+          <div class="form-row">
+            <label for="mInputEmail">E-mail de Notificação</label>
+            <input type="email" id="mInputEmail" placeholder="destinatario@email.com" required>
+          </div>
+          
+          <div class="form-row">
+            <label for="mInputPhone">Telefone de Contato (SMS)</label>
+            <input type="tel" id="mInputPhone" placeholder="+5511999999999" required>
+          </div>
+
+          <div class="form-row">
+            <label for="mInputThreshold">Limite de Alerta do Sensor</label>
+            <input type="number" id="mInputThreshold" min="10" max="1000" required>
+          </div>
+
+          <button type="submit" class="btn-mobile-submit">Salvar Configurações</button>
+        </form>
+
+        <div class="simulator-actions">
+          <h4>Ferramentas de Teste</h4>
+          <p>Dispare leituras falsas para testar o envio de e-mails e SMS na plataforma.</p>
+          <div class="btn-row">
+            <button class="btn-action-test" id="btnTestSafe">Simular Seguro (20 PPM)</button>
+            <button class="btn-action-test danger" id="btnTestFire">Simular Incêndio (85 PPM)</button>
+          </div>
+        </div>
+      </div>
+
+    </main>
+
+    <!-- Bottom Navigation Bar -->
+    <nav class="mobile-nav">
+      <button class="nav-item active" data-tab="tab-home">
+        <span class="nav-icon">📊</span>
+        <span class="nav-label">Painel</span>
+      </button>
+      <button class="nav-item" data-tab="tab-reports">
+        <span class="nav-icon">📋</span>
+        <span class="nav-label">Relatórios</span>
+      </button>
+      <button class="nav-item" data-tab="tab-settings">
+        <span class="nav-icon">⚙️</span>
+        <span class="nav-label">Ajustes</span>
+      </button>
+    </nav>
+
   </div>
 
-  <!-- Central de Toasts -->
-  <div class="toast-container" id="toastContainer"></div>
+  <!-- Central de Toasts do Mobile -->
+  <div class="mobile-toast-container" id="mobileToastContainer"></div>
 
-  <!-- Elemento de Áudio para o Alarme -->
+  <!-- Sound trigger for mobile notifications -->
   <script>
-    // Inicialização do contexto de áudio em navegador para sintetizar sirenes e beeps de alerta
-    let audioCtx = null;
-    let alarmInterval = null;
+    let mobileAudioCtx = null;
 
-    function initAudio() {
-      if (!audioCtx) {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playMobileBeep(freq = 600, duration = 0.15) {
+      if (!mobileAudioCtx) {
+        mobileAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
       }
-    }
+      if (!mobileAudioCtx) return;
 
-    function playBeep(freq = 600, duration = 0.1) {
-      initAudio();
-      if (!audioCtx) return;
-      
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
+      const osc = mobileAudioCtx.createOscillator();
+      const gain = mobileAudioCtx.createGain();
       
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+      osc.frequency.setValueAtTime(freq, mobileAudioCtx.currentTime);
       
-      gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+      gain.gain.setValueAtTime(0.08, mobileAudioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, mobileAudioCtx.currentTime + duration);
       
       osc.connect(gain);
-      gain.connect(audioCtx.destination);
+      gain.connect(mobileAudioCtx.destination);
       
       osc.start();
-      osc.stop(audioCtx.currentTime + duration);
-    }
-
-    function startSiren() {
-      initAudio();
-      if (!audioCtx || alarmInterval) return;
-
-      let high = true;
-      alarmInterval = setInterval(() => {
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(high ? 800 : 500, audioCtx.currentTime);
-        
-        gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
-        gain.gain.linearRampToValueAtTime(0.001, audioCtx.currentTime + 0.25);
-        
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.25);
-        
-        high = !high;
-      }, 300);
-    }
-
-    function stopSiren() {
-      if (alarmInterval) {
-        clearInterval(alarmInterval);
-        alarmInterval = null;
-      }
+      osc.stop(mobileAudioCtx.currentTime + duration);
     }
   </script>
 

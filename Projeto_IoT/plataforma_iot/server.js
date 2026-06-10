@@ -23,8 +23,8 @@ const MAX_READINGS = 100;
 
 // Configurações padrão de alerta (podem ser alteradas pelo Mobile/Dashboard)
 let alertConfig = {
-  email: process.env.ALERT_EMAIL || 'alerta.arcanjos@gmail.com',
-  phone: process.env.ALERT_PHONE || '+5511999999999',
+  email: process.env.ALERT_EMAIL || 'diegoximenes2005@gmail.com',
+  phone: process.env.ALERT_PHONE || '+5581988247885',
   threshold: 55 // Limite do sensor para disparo de alertas na plataforma
 };
 
@@ -72,15 +72,23 @@ async function initEmail() {
     }
   }
 }
-initEmail();
+// initEmail();
 
 // Middlewares
 app.use(express.json());
+
+// Habilita CORS para permitir que scripts externos (como no Tinkercad) enviem dados de leitura
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+  next();
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Servir o App Mobile na rota '/mobile'
+// Redireciona a antiga rota '/mobile' para a raiz '/'
 app.get('/mobile', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'mobile', 'index.html'));
+  res.redirect('/');
 });
 
 // ==========================================
@@ -145,10 +153,10 @@ app.post('/api/device/data', async (req, res) => {
     io.emit('systemAlert', newAlertEvent);
 
     // 1. Dispara E-mail
-    enviarEmailAlerta(smoke, timestamp);
+    // enviarEmailAlerta(smoke, timestamp);
 
     // 2. Dispara SMS (Real ou Simulado)
-    enviarSMSAlerta(smoke);
+    // enviarSMSAlerta(smoke);
 
   } else if (!alertaAtivo && ultimoEstadoAlerta) {
     // Normalizou
@@ -160,9 +168,33 @@ app.post('/api/device/data', async (req, res) => {
     alertsHistory.push(recoveryEvent);
     io.emit('systemAlert', recoveryEvent);
 
-    enviarEmailRecuperacao(smoke, timestamp);
-    enviarSMSRecuperacao(smoke);
   }
+
+  // Encaminha a leitura de dados para a TagoIO na nuvem automaticamente em segundo plano
+  const tagoToken = "1590acd8-26a1-41b8-a5cb-da6f022c5872";
+  const tagoPayload = [
+    { "variable": "smoke", "value": smoke },
+    { "variable": "alertaAtivo", "value": alertaAtivo ? 1 : 0 }
+  ];
+
+  fetch("https://api.tago.io/data", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": tagoToken
+    },
+    body: JSON.stringify(tagoPayload)
+  })
+  .then(response => {
+    if (response.ok) {
+      console.log(`📡 [TAGOIO Cloud] Dados sincronizados: Fumaça: ${smoke} PPM | Alerta: ${alertaAtivo}`);
+    } else {
+      console.log(`⚠️ [TAGOIO Cloud] Falha ao sincronizar dados. Código: ${response.status}`);
+    }
+  })
+  .catch(err => {
+    console.error("❌ [TAGOIO Cloud] Erro de conexão ao enviar:", err.message);
+  });
 
   res.json({ success: true, message: 'Dados recebidos com sucesso', state: { smoke, alertaAtivo } });
 });
@@ -336,8 +368,7 @@ io.on('connection', (socket) => {
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`\n🚀 ==================================================`);
   console.log(`🔥 PLATAFORMA IOT ARCANJOS ONLINE!`);
-  console.log(`💻 Dashboard Desktop: http://localhost:${PORT}`);
-  console.log(`📱 App Mobile:        http://localhost:${PORT}/mobile`);
-  console.log(`📡 API para Envio:    http://localhost:${PORT}/api/device/data`);
+  console.log(`📱 App de Monitoramento Mobile: http://localhost:${PORT}`);
+  console.log(`📡 API para Envio:              http://localhost:${PORT}/api/device/data`);
   console.log(`🚀 ==================================================\n`);
 });
