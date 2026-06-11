@@ -77,7 +77,7 @@ async function initEmail() {
 // Middlewares
 app.use(express.json());
 
-// Habilita CORS para permitir que scripts externos (como no Tinkercad) enviem dados de leitura
+// Habilita CORS para permitir que clientes e dispositivos externos enviem dados de leitura
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
@@ -185,7 +185,7 @@ app.post('/api/device/data', async (req, res) => {
   const tagoToken = "1590acd8-26a1-41b8-a5cb-da6f022c5872";
   const tagoPayload = [
     { "variable": "smoke", "value": smoke },
-    { "variable": "alertaAtivo", "value": alertaAtivo ? 1 : 0 }
+    { "variable": "alertaativo", "value": alertaAtivo ? 1 : 0 }
   ];
 
   fetch("https://api.tago.io/data", {
@@ -383,7 +383,7 @@ let ultimoTimeProcessado = null;
 async function buscarDadosTagoIO() {
   const tagoToken = "1590acd8-26a1-41b8-a5cb-da6f022c5872";
   try {
-    const response = await fetch("https://api.tago.io/data?variable[]=smoke&variable[]=alertaAtivo&qty=2", {
+    const response = await fetch("https://api.tago.io/data?variable[]=smoke&variable[]=alertaativo&qty=2", {
       method: "GET",
       headers: {
         "Device-Token": tagoToken
@@ -401,7 +401,7 @@ async function buscarDadosTagoIO() {
     const resData = await response.json();
     if (resData.status && resData.result && resData.result.length > 0) {
       const smokeItem = resData.result.find(item => item.variable === 'smoke');
-      const alertaItem = resData.result.find(item => item.variable === 'alertaAtivo');
+      const alertaItem = resData.result.find(item => item.variable === 'alertaativo');
 
       if (smokeItem) {
         const timestamp = smokeItem.time;

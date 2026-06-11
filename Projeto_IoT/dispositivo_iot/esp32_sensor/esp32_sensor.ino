@@ -1,187 +1,223 @@
 /**
- * 🛡️ Arcanjos - Código IoT para ESP32 / ESP8266
- * 
- * Este código conecta o microcontrolador ESP32 à sua rede WiFi local
- * e envia as leituras analógicas do sensor de fumaça diretamente
- * para o servidor da plataforma IoT Arcanjos via requisições HTTP POST.
- * 
- * Componentes necessários no ESP32:
- * - Sensor de Gás/Fumaça (Pino Analógico 34)
- * - LED Verde (Pino 2)
- * - LED Vermelho (Pino 4)
- * - Buzzer (Pino 5)
+ * 🛡️ Arcanjos - Código IoT para ESP32 (Wokwi)
+ *
+ * Funcionalidades:
+ *   - Conexão WiFi + HTTP POST direto para a TagoIO e Servidor local
+ *   - LCD I2C para exibição de status local
+ *   - Controle local de atuadores (LEDs e Buzzer)
+ *
+ * Componentes no Wokwi/Circuito Físico:
+ *   - Sensor de Gás/Fumaça (potenciômetro simulando MQ-2) → GPIO34
+ *   - LED Verde  → GPIO2
+ *   - LED Vermelho → GPIO4
+ *   - Buzzer     → GPIO5
+ *   - LCD I2C    → SDA (GPIO21) / SCL (GPIO22)
  */
 
 #include <WiFi.h>
 #include <HTTPClient.h>
+#include <LiquidCrystal_I2C.h>
 
 // ==========================================
-// CONFIGURAÇÕES DO WIFI E SERVIDOR
+// CONFIGURAÇÕES DE REDE E TAGOIO
 // ==========================================
-// Configuração para rodar no Wokwi (simulador WiFi gratuito do Wokwi)
-const char* ssid = "Wokwi-GUEST";
+const char* ssid     = "Wokwi-GUEST";
 const char* password = "";
 
-// Configurações para hardware real (se necessário):
-// const char* ssid = "NOVA ROMA_ALUNOS";
-// const char* password = "Alunos@2025";
-
-// Token de Autorização do Dispositivo TagoIO
-const char* tagoToken = "1590acd8-26a1-41b8-a5cb-da6f022c5872";
-
-// Configurado para enviar os dados diretamente para a nuvem da TagoIO
+const char* tagoToken      = "1590acd8-26a1-41b8-a5cb-da6f022c5872";
 const char* serverEndpoint = "https://api.tago.io/data";
+
+// ==========================================
+// LCD I2C (16 colunas x 2 linhas)
+// ==========================================
+LiquidCrystal_I2C lcd(0x27, 16, 2);
 
 // ==========================================
 // DEFINIÇÃO DOS PINOS
 // ==========================================
-const int sensorPin = 34;      // Pino analógico do sensor de gás no ESP32 (ex: GPIO34)
-const int ledVerde = 2;        // LED Verde indicador de segurança (GPIO2 / Onboard LED)
-const int ledVermelho = 4;     // LED Vermelho indicador de alerta (GPIO4)
-const int buzzer = 5;          // Buzzer indicador de som (GPIO5)
+const int sensorPin   = 34; // Sensor de fumaça (GPIO34 - ADC, equivalente ao A5)
+const int ledVerde    = 2;  // LED verde  (GPIO2  - equivalente ao pino 7)
+const int ledVermelho = 4;  // LED vermelho (GPIO4 - equivalente ao pino 6)
+const int buzzer      = 5;  // Buzzer (GPIO5 - mesmo pino)
 
 // ==========================================
-// CONFIGURAÇÕES DO SENSOR (HISTERESE)
+// LIMITES DO SENSOR (com histerese)
 // ==========================================
-const int limiteAlerta = 55;
-const int limiteNormal = 40;
-bool alertaAtivo = false;
+const int limiteAlerta = 55; // Valor para entrar em alerta
+const int limiteNormal = 40; // Valor para sair do alerta
 
-// Intervalo de tempo entre envios (em milissegundos)
-const unsigned long intervaloEnvio = 2000; 
+// ==========================================
+// VARIÁVEIS DE CONTROLE
+// ==========================================
+int  smoke       = 0;     // Valor lido do sensor (0-100)
+bool alertaAtivo = false; // Estado atual do sistema
+
 unsigned long tempoAnterior = 0;
+const unsigned long intervaloEnvio = 2000; // Envia para TagoIO a cada 2 segundos
 
-void setup() {
-  Serial.begin(115200);
-  
-  // Configuração dos pinos
-  pinMode(sensorPin, INPUT);
-  pinMode(ledVerde, OUTPUT);
+// ==========================================
+// SETUP
+// ==========================================
+void setup()
+{
+  pinMode(sensorPin,   INPUT);
+  pinMode(ledVerde,    OUTPUT);
   pinMode(ledVermelho, OUTPUT);
-  pinMode(buzzer, OUTPUT);
+  pinMode(buzzer,      OUTPUT);
 
-  // Inicializa LEDs
-  digitalWrite(ledVerde, HIGH);
-  digitalWrite(ledVermelho, LOW);
+  Serial.begin(9600);
 
-  // Conexão WiFi
-  Serial.println();
-  Serial.print("Conectando-se ao WiFi: ");
-  Serial.println(ssid);
-  
+  // Inicializa o LCD
+  lcd.init();
+  lcd.backlight();
+
+  // Mensagem inicial
+  lcd.setCursor(0, 0);
+  lcd.print("SISTEMA LIGANDO");
+  lcd.setCursor(0, 1);
+  lcd.print("MONITORANDO...");
+  delay(2000);
+
+  // Conecta ao WiFi
+  Serial.print("Conectando WiFi");
   WiFi.begin(ssid, password);
-  
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
-    // Pisca LED vermelho enquanto tenta conectar
-    digitalWrite(ledVermelho, !digitalRead(ledVermelho));
+    digitalWrite(ledVermelho, !digitalRead(ledVermelho)); // Pisca enquanto conecta
   }
-  
   digitalWrite(ledVermelho, LOW);
-  digitalWrite(ledVerde, HIGH);
-  
-  Serial.println("");
-  Serial.println("WiFi Conectado!");
-  Serial.print("Endereço IP obtido: ");
+  Serial.println(" Conectado!");
+  Serial.print("IP: ");
   Serial.println(WiFi.localIP());
+
+  mostrarNormal(); // Estado inicial seguro
 }
 
-void loop() {
-  // Lê o valor analógico do sensor (0 a 4095 no ESP32)
-  // Mapeamos para uma escala de 0 a 100 para corresponder ao código original
-  int rawValue = analogRead(sensorPin);
-  int smoke = map(rawValue, 0, 4095, 0, 100);
+// ==========================================
+// FUNÇÕES DE DISPLAY E SIRENE
+// ==========================================
 
-  // Exibe leitura no monitor serial local
-  Serial.print("Sensor (Raw): ");
-  Serial.print(rawValue);
-  Serial.print(" | Fumaça (Mapeado): ");
+// Exibe estado seguro no LCD
+void mostrarNormal()
+{
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("AMBIENTE SEGURO");
+  lcd.setCursor(0, 1);
+  lcd.print("SEM FUMACA");
+}
+
+// Exibe alerta no LCD
+void mostrarAlerta()
+{
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("!!! ALERTA !!!");
+  lcd.setCursor(0, 1);
+  lcd.print("FUMACA DETECTADA.");
+}
+
+// Sirene alternando frequências
+void sireneSuave()
+{
+  tone(buzzer, 500); // Som grave
+  delay(100);
+  tone(buzzer, 800); // Som agudo
+  delay(100);
+}
+
+// ==========================================
+// LOOP PRINCIPAL
+// ==========================================
+void loop()
+{
+  // Lê o sensor e mapeia para escala 0–100 (resolução de 12 bits do ESP32)
+  int rawValue = analogRead(sensorPin);
+  smoke = map(rawValue, 0, 4095, 0, 100);
+
+  // Log serial
+  Serial.print("Valor do sensor: ");
   Serial.println(smoke);
 
-  // Lógica de Histerese de Alerta
-  if (!alertaAtivo && smoke >= limiteAlerta) {
+  // --- Lógica de histerese ---
+
+  // Ativa alerta
+  if (!alertaAtivo && smoke >= limiteAlerta)
+  {
     alertaAtivo = true;
-    Serial.println("🚨 ESTADO DE ALERTA ATIVADO!");
-  } else if (alertaAtivo && smoke <= limiteNormal) {
+    mostrarAlerta();
+  }
+
+  // Desativa alerta
+  if (alertaAtivo && smoke <= limiteNormal)
+  {
     alertaAtivo = false;
     noTone(buzzer);
-    Serial.println("🟢 RETORNO AO ESTADO SEGURO.");
+    mostrarNormal();
   }
 
-  // Ações nos atuadores locais (LEDs e Buzzer)
-  if (alertaAtivo) {
+  // --- Atuadores ---
+  if (alertaAtivo)
+  {
     digitalWrite(ledVermelho, HIGH);
-    digitalWrite(ledVerde, LOW);
-    
-    // Toca Buzzer (Som alternado)
-    tone(buzzer, 600);
-    delay(100);
-    tone(buzzer, 850);
-    delay(100);
-  } else {
+    digitalWrite(ledVerde,    LOW);
+    sireneSuave();
+  }
+  else
+  {
     digitalWrite(ledVermelho, LOW);
-    digitalWrite(ledVerde, HIGH);
+    digitalWrite(ledVerde,    HIGH);
     noTone(buzzer);
+    delay(50);
   }
 
-  // Envia dados para o servidor de tempos em tempos
+  // --- Envio para TagoIO (a cada 2 segundos) ---
   unsigned long tempoAtual = millis();
-  if (tempoAtual - tempoAnterior >= intervaloEnvio) {
+  if (tempoAtual - tempoAnterior >= intervaloEnvio)
+  {
     tempoAnterior = tempoAtual;
-    
-    if (WiFi.status() == WL_CONNECTED) {
-      enviarDadosServidor(smoke, alertaAtivo);
-    } else {
-      Serial.println("❌ WiFi desconectado. Não foi possível enviar os dados.");
+    if (WiFi.status() == WL_CONNECTED)
+    {
+      enviarDadosTagoIO(smoke, alertaAtivo);
+    }
+    else
+    {
+      Serial.println("WiFi desconectado. Tentando reconectar...");
+      WiFi.begin(ssid, password);
     }
   }
 }
 
-// Envia a requisição HTTP POST com payload JSON (compatível com TagoIO e servidor local)
-void enviarDadosServidor(int valorFumaca, bool estadoAlerta) {
+// ==========================================
+// ENVIO HTTP PARA TAGOIO
+// ==========================================
+void enviarDadosTagoIO(int valorFumaca, bool estadoAlerta)
+{
   HTTPClient http;
-  
-  // Inicia conexão com o endpoint
   http.begin(serverEndpoint);
   http.addHeader("Content-Type", "application/json");
-  
-  // Se o endpoint for da TagoIO, adiciona o cabeçalho Authorization
-  if (String(serverEndpoint).indexOf("tago.io") != -1) {
-    http.addHeader("Authorization", tagoToken);
+  http.addHeader("Authorization", tagoToken);
+
+  // Padrão exigido pela TagoIO (variáveis em minúsculo)
+  String jsonPayload = "[";
+  jsonPayload += "{\"variable\":\"smoke\",\"value\":"        + String(valorFumaca) + "},";
+  jsonPayload += "{\"variable\":\"alertaativo\",\"value\":" + String(estadoAlerta ? 1 : 0) + "}";
+  jsonPayload += "]";
+
+  int httpCode = http.POST(jsonPayload);
+
+  if (httpCode > 0)
+  {
+    Serial.print("TagoIO OK (HTTP ");
+    Serial.print(httpCode);
+    Serial.println(")");
   }
-  
-  // Monta o payload de acordo com a plataforma de destino
-  String jsonPayload;
-  if (String(serverEndpoint).indexOf("tago.io") != -1) {
-    // Padrão exigido pela TagoIO: [{"variable": "nome", "value": valor}, ...]
-    jsonPayload = "[";
-    jsonPayload += "{\"variable\":\"smoke\",\"value\":" + String(valorFumaca) + "},";
-    jsonPayload += "{\"variable\":\"alertaAtivo\",\"value\":" + String(estadoAlerta ? 1 : 0) + "}";
-    jsonPayload += "]";
-  } else {
-    // Padrão do seu Servidor Express Local
-    jsonPayload = "{\"smoke\":" + String(valorFumaca) + 
-                  ",\"alertaAtivo\":" + (estadoAlerta ? "true" : "false") + "}";
+  else
+  {
+    Serial.print("TagoIO Erro: ");
+    Serial.println(httpCode);
   }
-  
-  Serial.print("Enviando dados: ");
-  Serial.println(jsonPayload);
-  
-  // Envia a requisição POST
-  int httpResponseCode = http.POST(jsonPayload);
-  
-  if (httpResponseCode > 0) {
-    String response = http.getString();
-    Serial.print("Resposta (");
-    Serial.print(httpResponseCode);
-    Serial.print("): ");
-    Serial.println(response);
-  } else {
-    Serial.print("❌ Erro no envio HTTP POST: ");
-    Serial.println(httpResponseCode);
-  }
-  
-  // Fecha conexão
+
   http.end();
 }
