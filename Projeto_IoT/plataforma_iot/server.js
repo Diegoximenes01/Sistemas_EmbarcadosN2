@@ -426,9 +426,8 @@ async function buscarDadosTagoIO() {
   }
 }
 
-// Inicia o polling a cada 2 segundos para manter o dashboard local atualizado
-setInterval(buscarDadosTagoIO, 2000);
-
+// Inicia o polling a cada 10 segundos para manter o dashboard local atualizado
+setInterval(buscarDadosTagoIO, 10000);
 // Inicialização do servidor
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`\n🚀 ==================================================`);

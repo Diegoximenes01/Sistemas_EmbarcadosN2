@@ -35,10 +35,11 @@ LiquidCrystal_I2C lcd(0x27, 16, 2);
 // ==========================================
 // DEFINIÇÃO DOS PINOS
 // ==========================================
-const int sensorPin   = 34; // Sensor de fumaça (GPIO34 - ADC, equivalente ao A5)
-const int ledVerde    = 2;  // LED verde  (GPIO2  - equivalente ao pino 7)
-const int ledVermelho = 4;  // LED vermelho (GPIO4 - equivalente ao pino 6)
-const int buzzer      = 5;  // Buzzer (GPIO5 - mesmo pino)
+const int sensorPin   = 34; // Sensor de fumaça (GPIO34 - ADC)
+const int ledVerde    = 23; // LED verde (GPIO23)
+const int ledVermelho = 2;  // LED vermelho (GPIO2)
+const int buzzer      = 18; // Buzzer pino de sinal (GPIO18)
+const int buzzerGnd   = 19; // Buzzer pino de terra virtual (GPIO19)
 
 // ==========================================
 // LIMITES DO SENSOR (com histerese)
@@ -51,10 +52,8 @@ const int limiteNormal = 40; // Valor para sair do alerta
 // ==========================================
 int  smoke       = 0;     // Valor lido do sensor (0-100)
 bool alertaAtivo = false; // Estado atual do sistema
-
 unsigned long tempoAnterior = 0;
-const unsigned long intervaloEnvio = 2000; // Envia para TagoIO a cada 2 segundos
-
+const unsigned long intervaloEnvio = 10000; // Envia para TagoIO a cada 10 segundos
 // ==========================================
 // SETUP
 // ==========================================
@@ -64,6 +63,8 @@ void setup()
   pinMode(ledVerde,    OUTPUT);
   pinMode(ledVermelho, OUTPUT);
   pinMode(buzzer,      OUTPUT);
+  pinMode(buzzerGnd,   OUTPUT);
+  digitalWrite(buzzerGnd, LOW); // Define terra virtual para o Buzzer
 
   Serial.begin(9600);
 
@@ -84,38 +85,40 @@ void setup()
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
-    digitalWrite(ledVermelho, !digitalRead(ledVermelho)); // Pisca enquanto conecta
+    digitalWrite(ledVermelho, !digitalRead(ledVermelho)); // Pisca LED vermelho enquanto conecta
   }
   digitalWrite(ledVermelho, LOW);
   Serial.println(" Conectado!");
   Serial.print("IP: ");
   Serial.println(WiFi.localIP());
 
-  mostrarNormal(); // Estado inicial seguro
+  lcd.clear();
 }
 
 // ==========================================
 // FUNÇÕES DE DISPLAY E SIRENE
 // ==========================================
 
-// Exibe estado seguro no LCD
-void mostrarNormal()
+// Exibe estado seguro no LCD com valor dinâmico
+void mostrarNormal(int valor)
 {
-  lcd.clear();
   lcd.setCursor(0, 0);
-  lcd.print("AMBIENTE SEGURO");
+  lcd.print("AMBIENTE SEGURO ");
   lcd.setCursor(0, 1);
-  lcd.print("SEM FUMACA");
+  lcd.print("GAS: ");
+  lcd.print(valor);
+  lcd.print("       ");
 }
 
-// Exibe alerta no LCD
-void mostrarAlerta()
+// Exibe alerta no LCD com valor dinâmico
+void mostrarAlerta(int valor)
 {
-  lcd.clear();
   lcd.setCursor(0, 0);
-  lcd.print("!!! ALERTA !!!");
+  lcd.print("!!! ALERTA !!!  ");
   lcd.setCursor(0, 1);
-  lcd.print("FUMACA DETECTADA.");
+  lcd.print("GAS: ");
+  lcd.print(valor);
+  lcd.print("       ");
 }
 
 // Sirene alternando frequências
@@ -146,7 +149,7 @@ void loop()
   if (!alertaAtivo && smoke >= limiteAlerta)
   {
     alertaAtivo = true;
-    mostrarAlerta();
+    lcd.clear(); // Limpa na transição de estado
   }
 
   // Desativa alerta
@@ -154,7 +157,7 @@ void loop()
   {
     alertaAtivo = false;
     noTone(buzzer);
-    mostrarNormal();
+    lcd.clear(); // Limpa na transição de estado
   }
 
   // --- Atuadores ---
@@ -162,6 +165,7 @@ void loop()
   {
     digitalWrite(ledVermelho, HIGH);
     digitalWrite(ledVerde,    LOW);
+    mostrarAlerta(smoke);
     sireneSuave();
   }
   else
@@ -169,7 +173,8 @@ void loop()
     digitalWrite(ledVermelho, LOW);
     digitalWrite(ledVerde,    HIGH);
     noTone(buzzer);
-    delay(50);
+    mostrarNormal(smoke);
+    delay(300);
   }
 
   // --- Envio para TagoIO (a cada 2 segundos) ---

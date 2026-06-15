@@ -53,16 +53,16 @@
 
     ["esp:GND.2", "led-green:C",  "black",  ["h0"]],
     ["esp:GND.2", "led-red:C",    "black",  ["h0"]],
-    ["esp:2",     "led-green:A",  "green",  ["h0"]],
-    ["esp:4",     "led-red:A",    "red",    ["h0"]],
+    ["esp:23",    "led-green:A",  "green",  ["h0"]],
+    ["esp:2",     "led-red:A",    "red",    ["h0"]],
 
-    ["esp:5",     "buzzer:SIG",   "orange", ["h0"]],
-    ["esp:GND.1", "buzzer:GND",   "black",  ["h0"]],
+    ["esp:18",    "buzzer:SIG",   "orange", ["h0"]],
+    ["esp:19",    "buzzer:GND",   "black",  ["h0"]],
 
     ["esp:21",    "lcd:SDA",      "purple", ["h0"]],
     ["esp:22",    "lcd:SCL",      "cyan",   ["h0"]],
     ["esp:GND.1", "lcd:GND",      "black",  ["h0"]],
-    ["esp:3V3",   "lcd:VCC",      "red",    ["h0"]]
+    ["esp:5V",    "lcd:VCC",      "red",    ["h0"]]
   ],
   "dependencies": {}
 }
